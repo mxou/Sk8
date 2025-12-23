@@ -44,8 +44,17 @@ skate.position.y = 0.1;
 scene.add(skate);
 
 /* ---------- State ---------- */
-let states = ["IDLE", "OLLIE", "FLIP", "TREFLIP", "HARDFLIP"];
-let state = "IDLE";
+const STATES = {
+  IDLE: "IDLE",
+  JUMP: "JUMP",
+  FLIP: "FLIP",
+  TREFLIP: "TREFLIP",
+  HARDFLIP: "HARDFLIP",
+};
+
+const AIR_STATES = new Set([STATES.JUMP, STATES.FLIP, STATES.TREFLIP, STATES.HARDFLIP]);
+
+let state = STATES.IDLE;
 
 let velocityY = 0;
 const GRAVITY = -9;
@@ -56,31 +65,67 @@ const FLIP_SPEED = Math.PI * 2.2; // ≈ 1 kickflip
 /* ---------- Clock ---------- */
 const clock = new THREE.Clock();
 
+/* ---------- Déplacements ---------- */
+const moveSpeed = 4; // unités par seconde
+const move = {
+  forward: false,
+  back: false,
+  left: false,
+  right: false,
+};
+
 /* ---------- Input ---------- */
 window.addEventListener("keydown", (e) => {
-  if (state !== "IDLE") return;
+  if (state !== STATES.IDLE) return;
 
-  if (e.code === "Space") {
-    state = "JUMP";
-    velocityY = JUMP_FORCE;
+  const trickMap = {
+    Space: STATES.JUMP,
+    KeyE: STATES.FLIP,
+    KeyR: STATES.TREFLIP,
+    KeyF: STATES.HARDFLIP,
+  };
+
+  const nextState = trickMap[e.code];
+  if (!nextState) return;
+
+  state = nextState;
+  velocityY = JUMP_FORCE;
+  flipRotation = 0;
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+
+  switch (e.code) {
+    case "KeyZ":
+      move.forward = true;
+      break;
+    case "KeyS":
+      move.back = true;
+      break;
+    case "KeyQ":
+      move.left = true;
+      break;
+    case "KeyD":
+      move.right = true;
+      break;
   }
+});
 
-  if (e.code === "KeyE") {
-    state = "FLIP";
-    velocityY = JUMP_FORCE;
-    flipRotation = 0;
-  }
-
-  if (e.code === "KeyR") {
-    state = "TREFLIP";
-    velocityY = JUMP_FORCE;
-    flipRotation = 0;
-  }
-
-  if (e.code === "KeyF") {
-    state = "HARDFLIP";
-    velocityY = JUMP_FORCE;
-    flipRotation = 0;
+window.addEventListener("keyup", (e) => {
+  switch (e.code) {
+    case "KeyZ":
+      move.forward = false;
+      break;
+    case "KeyS":
+      move.back = false;
+      break;
+    case "KeyQ":
+      move.left = false;
+      break;
+    case "KeyD":
+      move.right = false;
+      break;
   }
 });
 
@@ -88,40 +133,45 @@ window.addEventListener("keydown", (e) => {
 function animate() {
   const delta = clock.getDelta();
 
-  if (state === "JUMP" || state === "FLIP" || state === "TREFLIP" || state === "HARDFLIP") {
+  if (AIR_STATES.has(state)) {
     velocityY += GRAVITY * delta;
     skate.position.y += velocityY * delta;
 
-    // inclination ollie
-    // skate.rotation.z = Math.min(skate.rotation.x + delta * 3, 0.4);
-
-    // kickflip
-    if (state === "FLIP") {
+    if (state !== STATES.JUMP) {
       flipRotation += FLIP_SPEED * delta;
-      skate.rotation.z = flipRotation;
     }
 
-    // treflip
-    if (state === "TREFLIP") {
-      flipRotation += FLIP_SPEED * delta;
-      skate.rotation.z = flipRotation;
-      skate.rotation.y = -flipRotation;
+    switch (state) {
+      case STATES.FLIP:
+        skate.rotation.z = flipRotation;
+        break;
+
+      case STATES.TREFLIP:
+        skate.rotation.z = flipRotation;
+        skate.rotation.y = -flipRotation;
+        break;
+
+      case STATES.HARDFLIP:
+        skate.rotation.z = flipRotation;
+        skate.rotation.y = flipRotation / 2;
+        break;
     }
 
-    // hardflip
-    if (state === "HARDFLIP") {
-      flipRotation += FLIP_SPEED * delta;
-      skate.rotation.z = flipRotation;
-      skate.rotation.y = flipRotation / 2;
-    }
-
-    // atterrissage
     if (skate.position.y <= 0.1) {
       skate.position.y = 0.1;
       skate.rotation.set(0, 0, 0);
       velocityY = 0;
       flipRotation = 0;
-      state = "IDLE";
+      state = STATES.IDLE;
+    }
+  }
+
+  if (state === STATES.IDLE) {
+    const dir = new THREE.Vector3((move.right ? 1 : 0) - (move.left ? 1 : 0), 0, (move.back ? 1 : 0) - (move.forward ? 1 : 0));
+
+    if (dir.lengthSq() > 0) {
+      dir.normalize();
+      skate.position.addScaledVector(dir, moveSpeed * delta);
     }
   }
 
